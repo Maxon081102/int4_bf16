@@ -1,0 +1,8 @@
+torch==2.4.0
+triton==2.1.0
+transformers==4.44.2
+datasets==3.0.1
+accelerate==1.0.0
+sentencepiece==0.2.0
+tqdm==4.66.5
+
