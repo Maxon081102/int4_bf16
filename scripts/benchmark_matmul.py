@@ -29,6 +29,16 @@ def _bench_kernel(callable_fn, warmup: int, iters: int) -> float:
     return np.mean(times)
 
 
+def _tensor_memory_mb(tensor: torch.Tensor) -> float:
+    return tensor.element_size() * tensor.numel() / (1024 ** 2)
+
+
+def _quantized_weights_memory_mb(quantized) -> float:
+    packed_bytes = quantized.packed_uint8.element_size() * quantized.packed_uint8.numel()
+    scale_bytes = quantized.scales.element_size() * quantized.scales.numel()
+    return (packed_bytes + scale_bytes) / (1024 ** 2)
+
+
 def run_benchmark(
     token_counts: Iterable[int],
     layer_specs: Dict[str, LayerSpec],
@@ -47,6 +57,8 @@ def run_benchmark(
         )
         quantized = quantize_fp16_to_int4(weight)
         weight_bf16 = weight.to(torch.bfloat16)
+        weight_mem_mb = _tensor_memory_mb(weight)
+        quantized_mem_mb = _quantized_weights_memory_mb(quantized)
 
         for tokens in token_counts:
             activations = torch.randn(
@@ -75,6 +87,8 @@ def run_benchmark(
                 "speedup": baseline_time / quant_time if quant_time > 0 else float("inf"),
                 "max_abs_err": error,
                 "mean_abs_err": mean_error,
+                "weight_mb": weight_mem_mb,
+                "quantized_mb": quantized_mem_mb,
             }
     return results
 
@@ -120,7 +134,8 @@ def main():
 
     header = (
         f"{'Layer':<10} {'Tokens':>6} {'Baseline (ms)':>16} "
-        f"{'Quant (ms)':>12} {'Speedup':>10} {'Max |err|':>12} {'Mean |err|':>12}"
+        f"{'Quant (ms)':>12} {'Speedup':>10} {'Max |err|':>12} {'Mean |err|':>12} "
+        f"{'Weight (MB)':>12} {'Quant (MB)':>11}"
     )
     print(header)
     print("-" * len(header))
@@ -136,7 +151,9 @@ def main():
                 f"{metrics['quant_ms']:>12.4f} "
                 f"{metrics['speedup']:>9.3f}x "
                 f"{metrics['max_abs_err']:>12.6f} "
-                f"{metrics['mean_abs_err']:>12.6f}"
+                f"{metrics['mean_abs_err']:>12.6f} "
+                f"{metrics['weight_mb']:>12.2f} "
+                f"{metrics['quantized_mb']:>11.2f}"
             )
 
 
